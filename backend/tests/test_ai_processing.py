@@ -162,7 +162,7 @@ class ProcessingTests(unittest.TestCase):
         mutations = [
             ("actionItems", "jiraIssueKey", "FAKE-1"), ("actionItems", "jiraIssueUrl", "https://fake.invalid"),
             ("actionItems", "status", "done"), ("actionItems", "id", "user-id"),
-            ("actionItems", "assigneeId", "invented-owner"), ("actionItems", "due", "2050-01-01"),
+            ("actionItems", "assigneeId", "invented-owner"),
             ("followUps", "status", "approved"), ("followUps", "scheduledMeetingId", "invented"),
             ("followUps", "date", "2050-01-01"), ("followUps", "startTime", "14:00"),
             ("agendaEntries", "title", "Invented topic"), ("agendaEntries", "agendaIndex", 50),
@@ -182,6 +182,16 @@ class ProcessingTests(unittest.TestCase):
                 self.provider.analyze.return_value = output
                 with self.assertRaises(AIProcessingFailed): self.service.process("ai-test")
                 self.assertEqual(self.service.get("ai-test"), {**before, "aiStatus": "failed"})
+
+    def test_unsupported_due_date_is_removed_without_losing_the_action(self):
+        output = intelligence()
+        output["actionItems"][0]["due"] = "2050-01-01"
+        self.provider.analyze.return_value = output
+        after = self.service.process("ai-test")
+        action = next(item for item in after["actionItems"]
+                      if item["text"] == "Update the release checklist")
+        self.assertEqual(action["due"], "")
+        self.assertEqual(after["aiStatus"], "processed")
 
     def test_unavailable_timestamps_preserve_existing_values(self):
         def edit(m):
@@ -216,11 +226,14 @@ class ProcessingTests(unittest.TestCase):
         first = self.service.process("ai-test")
         task_id = first["actionItems"][-1]["id"]
         jira = Mock()
+        jira.get_account_id.return_value = "test-assignee"
         jira.create_task.return_value = {"key": "KAN-51", "url": "https://jira.example.invalid/browse/KAN-51"}
         linked, created = self.service.create_jira_issue("ai-test", task_id, jira)
         self.assertTrue(created)
         self.assertEqual(linked["status"], "todo")
-        jira.create_task.assert_called_once_with("Update the release checklist")
+        jira.create_task.assert_called_once_with(
+            "Update the release checklist", assignee_account_id="test-assignee"
+        )
         self.repo.update("ai-test", lambda m: {**m, "actionItems": [{**t, "status": "done"} if t["id"] == task_id else t for t in m["actionItems"]]})
         again = self.service.process("ai-test")
         self.assertEqual(len(again["actionItems"]), 2)

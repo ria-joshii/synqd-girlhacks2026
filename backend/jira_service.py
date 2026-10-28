@@ -36,18 +36,6 @@ class JiraService:
             self.api_token
         )
 
-    def get_account_id(self, owner: str | None):
-        if not owner:
-            return None
-
-        owner = owner.strip().lower()
-
-        for name, account_id in JIRA_USERS.items():
-            if name.lower() == owner:
-                return account_id
-
-        return None
-
     def get_current_user(self):
         response = requests.get(
             f"{self.base_url}/rest/api/3/myself",

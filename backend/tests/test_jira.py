@@ -18,6 +18,7 @@ URL = "https://synq-team-hackathon.atlassian.net/browse/KAN-8"
 
 def fake_jira(key="KAN-8"):
     jira = MagicMock()
+    jira.get_account_id.return_value = "test-assignee"
     jira.create_task.return_value = {"key": key, "url": URL.replace("KAN-8", key)}
     return jira
 
@@ -35,7 +36,9 @@ class JiraServiceTests(unittest.TestCase):
         item, created = self.service.create_jira_issue("m1", "t1", jira)
         self.assertTrue(created)
         self.assertEqual((item["jiraIssueKey"], item["jiraIssueUrl"]), ("KAN-8", URL))
-        jira.create_task.assert_called_once_with("Fix declined-card retry bug")
+        jira.create_task.assert_called_once_with(
+            "Fix declined-card retry bug", assignee_account_id="test-assignee"
+        )
         # The stored meeting carries the metadata, and no other item does.
         self.assertEqual(self.task("t1")["jiraIssueKey"], "KAN-8")
         self.assertEqual(self.task("t1")["jiraIssueUrl"], URL)
